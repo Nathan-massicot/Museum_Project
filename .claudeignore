@@ -1,6 +1,0 @@
-# Sensitive files
-.env
-.env.*
-
-# Virtual environment
-.venv/
