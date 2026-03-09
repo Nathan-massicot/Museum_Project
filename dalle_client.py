@@ -13,6 +13,15 @@ from openai import OpenAI
 
 load_dotenv()
 
+
+def _get_secret(key: str, default: str = "") -> str:
+    """Get a secret from st.secrets (Streamlit Cloud) or os.getenv (local .env)."""
+    try:
+        import streamlit as st
+        return st.secrets[key]
+    except Exception:
+        return os.getenv(key, default)
+
 OUTPUT_DIR = Path("output")
 
 # gpt-image-1.5 token pricing in USD
@@ -60,9 +69,9 @@ def generate_image(
         input_tokens: number of input tokens used
         output_tokens: number of output tokens used
     """
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = _get_secret("OPENAI_API_KEY")
     if not api_key or api_key.startswith("sk-REMPLACE"):
-        raise ValueError("OPENAI_API_KEY not configured in .env")
+        raise ValueError("OPENAI_API_KEY not configured in .env or Streamlit secrets")
 
     client = OpenAI(api_key=api_key)
     OUTPUT_DIR.mkdir(exist_ok=True)

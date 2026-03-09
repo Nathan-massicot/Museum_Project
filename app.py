@@ -16,6 +16,14 @@ from dalle_client import generate_image
 
 load_dotenv()
 
+
+def get_secret(key: str, default: str = "") -> str:
+    """Get a secret from st.secrets (Streamlit Cloud) or os.getenv (local .env)."""
+    try:
+        return st.secrets[key]
+    except (KeyError, FileNotFoundError):
+        return os.getenv(key, default)
+
 # ---------------------------------------------------------------------------
 # Page config (must be first Streamlit call)
 # ---------------------------------------------------------------------------
@@ -348,7 +356,7 @@ def render_login():
                 "Enter", use_container_width=True, type="primary"
             )
             if submitted:
-                if password == os.getenv("APP_PASSWORD", ""):
+                if password == get_secret("APP_PASSWORD"):
                     st.session_state.authenticated = True
                     st.session_state.page = "home"
                     st.rerun()
