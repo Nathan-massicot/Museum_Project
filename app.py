@@ -5,12 +5,16 @@ Single-page app with 4 states: home, prompt, loading, result.
 """
 
 import base64
+import os
 from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
+from dotenv import load_dotenv
 
-from dalle_client import generate_image, get_cost
+from dalle_client import generate_image
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Page config (must be first Streamlit call)
@@ -304,7 +308,8 @@ def _build_custom_prompt(location_desc: str, user_idea: str) -> str:
 # Session state initialization
 # ---------------------------------------------------------------------------
 _DEFAULTS = {
-    "page": "home",
+    "page": "login",
+    "authenticated": False,
     "selected_location": None,
     "prompt_mode": None,
     "custom_prompt": "",
@@ -314,6 +319,41 @@ _DEFAULTS = {
 for key, val in _DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = val
+
+
+# ---------------------------------------------------------------------------
+# PAGE: Login
+# ---------------------------------------------------------------------------
+def render_login():
+    st.markdown("")
+    st.markdown("")
+    st.markdown(
+        '<div class="page-title">Future Transport</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="page-subtitle">Bienne / Biel 2075</div>',
+        unsafe_allow_html=True,
+    )
+
+    _, center, _ = st.columns([1, 1.5, 1])
+    with center:
+        with st.form("login_form"):
+            password = st.text_input(
+                "Password",
+                type="password",
+                placeholder="Enter password to continue",
+            )
+            submitted = st.form_submit_button(
+                "Enter", use_container_width=True, type="primary"
+            )
+            if submitted:
+                if password == os.getenv("APP_PASSWORD", ""):
+                    st.session_state.authenticated = True
+                    st.session_state.page = "home"
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
 
 
 # ---------------------------------------------------------------------------
@@ -368,10 +408,9 @@ def render_home():
                 st.rerun()
 
     # Footer cost info
-    cost_per_img = get_cost("1024x1024", "standard")
     st.markdown(
         f'<div class="cost-badge">Session cost: ${st.session_state.session_cost:.3f} '
-        f"&nbsp;|&nbsp; Cost per image: ${cost_per_img:.3f}</div>",
+        f"&nbsp;|&nbsp; Model: gpt-image-1.5</div>",
         unsafe_allow_html=True,
     )
 
@@ -486,7 +525,7 @@ def render_loading():
 
     _, center, _ = st.columns([1, 2, 1])
     with center:
-        with st.spinner("DALL-E is imagining the future of transport\u2026"):
+        with st.spinner("Generating your vision of the future\u2026"):
             if st.session_state.prompt_mode == "auto":
                 prompt = _build_auto_prompt(data["description"])
             else:
@@ -494,9 +533,11 @@ def render_loading():
                     data["description"], st.session_state.custom_prompt
                 )
 
+            source_img = str(STATIC_DIR / data["image"]) if data.get("image") else None
+
             try:
                 result = generate_image(
-                    prompt, size="1024x1024", quality="standard"
+                    prompt, source_image=source_img, size="1024x1024", quality="low"
                 )
                 result["location"] = name
                 result["prompt_mode"] = st.session_state.prompt_mode
@@ -570,10 +611,12 @@ def render_result():
         height=0,
     )
 
-    # Cost info (discreet)
+    # Cost & token info
     st.markdown(
-        f'<div class="cost-badge">Generation cost: ${result["cost"]:.3f} '
-        f"&nbsp;|&nbsp; Session total: ${st.session_state.session_cost:.3f}</div>",
+        f'<div class="cost-badge">'
+        f'Tokens: {result.get("input_tokens", 0)} in / {result.get("output_tokens", 0)} out '
+        f'&nbsp;|&nbsp; Cost: ${result["cost"]:.4f} '
+        f"&nbsp;|&nbsp; Session total: ${st.session_state.session_cost:.4f}</div>",
         unsafe_allow_html=True,
     )
 
@@ -581,13 +624,15 @@ def render_result():
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
-page = st.session_state.page
-
-if page == "home":
-    render_home()
-elif page == "prompt":
-    render_prompt()
-elif page == "loading":
-    render_loading()
-elif page == "result":
-    render_result()
+if not st.session_state.authenticated:
+    render_login()
+else:
+    page = st.session_state.page
+    if page == "home":
+        render_home()
+    elif page == "prompt":
+        render_prompt()
+    elif page == "loading":
+        render_loading()
+    elif page == "result":
+        render_result()
