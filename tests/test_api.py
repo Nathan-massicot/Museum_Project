@@ -6,11 +6,15 @@ Vérifie que la clé API fonctionne et estime le coût par image.
 import os
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
+OUTPUT_DIR = PROJECT_ROOT / "output"
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Coûts DALL-E 3 par image (en USD)
 DALLE3_PRICING = {
@@ -62,7 +66,7 @@ def test_dalle(
 
     # Sauvegarder l'image
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"output/test_{timestamp}.png"
+    filename = str(OUTPUT_DIR / f"test_{timestamp}.png")
     urllib.request.urlretrieve(image_url, filename)
     print(f"Image sauvegardée : {filename}")
     print()

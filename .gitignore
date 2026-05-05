@@ -12,9 +12,15 @@ wheels/
 # Environment variables
 .env
 
-# Generated images
+# Generated images and visitor data
 output/*.png
+output/visitor_emails.csv
+
+# macOS
+.DS_Store
 
 # Claude code
 .claude
 .claudeignore
+
+EMAIL_SETUP.md
