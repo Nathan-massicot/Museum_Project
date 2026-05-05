@@ -24,7 +24,6 @@ import mailer
 PROJECT_ROOT = Path(__file__).parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-
 def get_secret(key: str, default: str = "") -> str:
     """Get a secret from st.secrets (Streamlit Cloud) or os.getenv (local .env)."""
     try:
