@@ -97,7 +97,7 @@ footer { display: none; }
 }
 .loc-card img {
     width: 100%;
-    height: 180px;
+    height: 320px;
     object-fit: cover;
     display: block;
 }
@@ -298,7 +298,11 @@ T = {
             "2. Décrivez votre vision du transport en 2075, ou cliquez sur "
             "« Laissez l'IA vous surprendre » pour laisser l'IA imaginer.\n\n"
             "3. Patientez quelques secondes pendant la génération.\n\n"
-            "4. Si vous le souhaitez, recevez l'image par email."
+            "4. Si vous le souhaitez, recevez l'image par email.\n\n"
+            "Note : les visualisations sont générées par intelligence "
+            "artificielle (DALL-E). Vos créations sont transmises "
+            "anonymement au musée, et une sélection sera présentée dans "
+            "l'exposition."
         ),
         "loading_title": "Création de votre vision…",
         "loading_sub": "Quelques secondes encore.",
@@ -599,9 +603,9 @@ def render_home():
                 unsafe_allow_html=True,
             )
 
-    # Location grid (4 cards per row)
-    location_items = list(LOCATIONS.items())
-    cols_per_row = 4
+    # Location grid (2x2 square: keep the first four locations)
+    location_items = list(LOCATIONS.items())[:4]
+    cols_per_row = 2
     for row_start in range(0, len(location_items), cols_per_row):
         row_items = location_items[row_start : row_start + cols_per_row]
         cols = st.columns(cols_per_row, gap="medium")
