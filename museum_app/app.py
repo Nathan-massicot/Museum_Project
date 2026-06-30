@@ -53,8 +53,14 @@ header[data-testid="stHeader"] { display: none; }
 footer { display: none; }
 #MainMenu { display: none; }
 
+/* Global font — Interstate (falls back gracefully where not installed) */
+html, body, .stApp, [data-testid="stAppViewContainer"],
+button, input, textarea, select, h1, h2, h3, h4, h5, h6, p, div, span, label {
+    font-family: "Interstate", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+}
+
 .stApp {
-    background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #16213e 100%);
+    background: #28373b;
 }
 
 /* Trim Streamlit's default top padding */
@@ -292,7 +298,7 @@ T = {
         "generate_with_idea": "Générer mon idée",
         "textarea_placeholder": "Ex. : un téléphérique solaire reliant les collines…",
         "empty_warning": "Veuillez décrire votre vision d'abord.",
-        "help_btn": "Comment ça marche ?",
+        "help_btn": "Comment ça marche",
         "help_text": (
             "1. Choisissez un lieu de Bienne/Biel parmi les images.\n\n"
             "2. Décrivez votre vision du transport en 2075, ou cliquez sur "
@@ -334,7 +340,7 @@ T = {
         "generate_with_idea": "Meine Idee erzeugen",
         "textarea_placeholder": "Z. B.: eine Solar-Seilbahn zwischen den Hügeln…",
         "empty_warning": "Bitte beschreiben Sie zuerst Ihre Vision.",
-        "help_btn": "Wie funktioniert es?",
+        "help_btn": "Wie funktioniert es",
         "help_text": (
             "1. Wählen Sie einen Ort in Biel/Bienne unter den Bildern.\n\n"
             "2. Beschreiben Sie Ihre Vision des Verkehrs im Jahr 2075 oder "
@@ -373,7 +379,7 @@ T = {
         "generate_with_idea": "Generate with my idea",
         "textarea_placeholder": "e.g. A solar-powered cable car connecting the hilltops…",
         "empty_warning": "Please describe your vision first.",
-        "help_btn": "How does it work?",
+        "help_btn": "How does it work",
         "help_text": (
             "1. Choose a location in Bienne/Biel from the images.\n\n"
             "2. Describe your vision of transport in 2075, or click "

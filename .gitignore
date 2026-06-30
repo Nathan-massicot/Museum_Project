@@ -23,4 +23,6 @@ output/visitor_emails.csv
 .claude
 .claudeignore
 
+#doc
 EMAIL_SETUP.md
+OpenAI_Image_Models_Cost_Analysis.docx
