@@ -1,0 +1,29 @@
+[Unit]
+Description=Future Transport museum kiosk (Streamlit + heartbeat supervisor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# --- EDIT THESE THREE for your kiosk machine ---------------------------------
+User=kiosk
+WorkingDirectory=/opt/Museum_Project
+ExecStart=/opt/Museum_Project/.venv/bin/python /opt/Museum_Project/ops/watchdog.py
+# -----------------------------------------------------------------------------
+
+# Optional tuning (defaults shown); uncomment to override
+# Environment=KIOSK_PORT=8501
+# Environment=KIOSK_CHECK_INTERVAL=15
+# Environment=KIOSK_MAX_FAILURES=4
+
+# Resurrect the supervisor itself if it ever crashes.
+Restart=always
+RestartSec=5
+
+# Send SIGTERM to the whole group so Streamlit stops cleanly on shutdown.
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

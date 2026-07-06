@@ -16,6 +16,9 @@ wheels/
 output/*.png
 output/visitor_emails.csv
 
+# Heartbeat / supervisor logs
+logs/
+
 # macOS
 .DS_Store
 
