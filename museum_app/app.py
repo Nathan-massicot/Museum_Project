@@ -9,9 +9,9 @@ Visitor flow:
 
 import base64
 import csv
+import json
 import os
 import re
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -337,10 +337,7 @@ T = {
         "error_generation": "La génération a échoué",
         "error_retry": "Réessayer",
         "offline_title": "Mode hors-ligne",
-        "offline_sub": "Connexion Internet momentanément indisponible.",
-        "offline_gallery": "En attendant, découvrez les dernières créations des visiteurs.",
         "offline_reconnecting": "Reconnexion automatique en cours… La borne reprendra dès le retour d'Internet.",
-        "offline_empty": "Aucune création à afficher pour le moment.",
     },
     "de": {
         "lang_label": "DE",
@@ -381,10 +378,7 @@ T = {
         "error_generation": "Generierung fehlgeschlagen",
         "error_retry": "Erneut versuchen",
         "offline_title": "Offline-Modus",
-        "offline_sub": "Internetverbindung vorübergehend nicht verfügbar.",
-        "offline_gallery": "Entdecken Sie in der Zwischenzeit die neuesten Kreationen der Besucher.",
         "offline_reconnecting": "Automatische Neuverbindung läuft… Die Station wird fortgesetzt, sobald das Internet zurück ist.",
-        "offline_empty": "Momentan keine Kreationen zum Anzeigen.",
     },
     "en": {
         "lang_label": "EN",
@@ -424,10 +418,7 @@ T = {
         "error_generation": "Generation failed",
         "error_retry": "Try again",
         "offline_title": "Offline mode",
-        "offline_sub": "Internet connection temporarily unavailable.",
-        "offline_gallery": "In the meantime, explore the latest visitor creations.",
         "offline_reconnecting": "Automatically reconnecting… The kiosk will resume as soon as the internet is back.",
-        "offline_empty": "No creations to show yet.",
     },
 }
 
@@ -449,6 +440,29 @@ def _image_data_uri(image_file: str) -> str:
     img_path = STATIC_DIR / image_file
     b64 = base64.b64encode(img_path.read_bytes()).decode()
     return f"data:image/jpeg;base64,{b64}"
+
+
+def _output_image_data_uri(img_path, max_px: int = 1600, quality: int = 85) -> str:
+    """
+    Base64 data URI for a generated image, downscaled to a JPEG so the offline
+    slideshow stays light (2 MB PNGs -> a few hundred KB). Falls back to the raw
+    PNG if Pillow is unavailable.
+    """
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(img_path) as im:
+            im = im.convert("RGB")
+            im.thumbnail((max_px, max_px))
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=quality, optimize=True)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return f"data:image/jpeg;base64,{b64}"
+    except Exception:
+        b64 = base64.b64encode(Path(img_path).read_bytes()).decode()
+        return f"data:image/png;base64,{b64}"
 
 
 def _build_auto_prompt(location_desc: str) -> str:
@@ -496,28 +510,6 @@ def _save_email(email: str, prompt_text: str, image_path: str) -> None:
             prompt_text,
             image_path,
         ])
-
-
-def is_online(ttl: float = 12.0) -> bool:
-    """
-    Cached connectivity check. Probes the network at most once per `ttl`
-    seconds so Streamlit reruns stay snappy; call refresh_connectivity()
-    to force an immediate re-probe.
-    """
-    cache = st.session_state.get("_net_cache")
-    now = time.time()
-    if cache and (now - cache[0]) < ttl:
-        return cache[1]
-    ok = health.check_internet()
-    st.session_state["_net_cache"] = (now, ok)
-    return ok
-
-
-def refresh_connectivity() -> bool:
-    """Force an uncached probe and update the cache. Returns online state."""
-    ok = health.check_internet()
-    st.session_state["_net_cache"] = (time.time(), ok)
-    return ok
 
 
 # ---------------------------------------------------------------------------
@@ -635,6 +627,96 @@ def render_login():
                     st.rerun()
                 else:
                     st.error(tr("login_error"))
+
+
+# ---------------------------------------------------------------------------
+# Idle-safe connectivity watcher for the interactive pages
+# ---------------------------------------------------------------------------
+def _inject_offline_overlay():
+    """
+    Inject a full-screen offline slideshow into the parent document, driven by the
+    browser's own `offline`/`online` events (navigator.onLine). This is instant
+    and reliable the moment the kiosk loses Wi-Fi — no server round-trip, no
+    polling. The overlay, its crossfade timer and the event handlers live on the
+    parent window, and are re-bound on every render so they survive Streamlit
+    reruns and page changes.
+    """
+    images = health.recent_images(10)
+    if not images:
+        return
+    imgs_json = json.dumps([_output_image_data_uri(p) for p in images])
+    title = json.dumps(tr("offline_title"))
+    subtitle = json.dumps(tr("offline_reconnecting"))
+    components.html(
+        f"""
+        <script>
+        (function() {{
+          const pwin = window.parent, pdoc = pwin.document;
+          const imgs = {imgs_json};
+          let ov = pdoc.getElementById('kiosk-offline-overlay');
+          if (!ov) {{
+            ov = pdoc.createElement('div');
+            ov.id = 'kiosk-offline-overlay';
+            ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;'
+              + 'background:#28373b;display:none;overflow:hidden;';
+            let html = '';
+            imgs.forEach(function(src, i) {{
+              html += '<div class="kslide" style="position:absolute;inset:0;opacity:'
+                + (i === 0 ? '1' : '0') + ';transition:opacity 1.4s ease-in-out;'
+                + 'background-size:cover;background-position:center;'
+                + "background-image:url('" + src + "');\\"></div>";
+            }});
+            html += '<div style="position:absolute;top:28px;left:0;right:0;'
+              + 'text-align:center;z-index:2;color:#fff;font-size:2.2rem;font-weight:300;'
+              + 'letter-spacing:3px;font-family:Helvetica,Arial,sans-serif;">' + {title} + '</div>';
+            html += '<div style="position:absolute;bottom:28px;left:0;right:0;'
+              + 'text-align:center;z-index:2;color:#8899aa;font-size:1rem;'
+              + 'font-family:Helvetica,Arial,sans-serif;">' + {subtitle} + '</div>';
+            ov.innerHTML = html;
+            pdoc.body.appendChild(ov);
+            pwin.__ki = 0;
+          }}
+          const show = function() {{ ov.style.display = 'block'; }};
+          const hide = function() {{ ov.style.display = 'none'; }};
+          if (pwin.__kioskShow) pwin.removeEventListener('offline', pwin.__kioskShow);
+          if (pwin.__kioskHide) pwin.removeEventListener('online', pwin.__kioskHide);
+          pwin.__kioskShow = show; pwin.__kioskHide = hide;
+          pwin.addEventListener('offline', show);
+          pwin.addEventListener('online', hide);
+          if (pwin.__kioskCycle) pwin.clearInterval(pwin.__kioskCycle);
+          pwin.__kioskCycle = pwin.setInterval(function() {{
+            const sl = pdoc.querySelectorAll('#kiosk-offline-overlay .kslide');
+            if (sl.length < 2) return;
+            sl[pwin.__ki % sl.length].style.opacity = '0';
+            pwin.__ki = (pwin.__ki + 1) % sl.length;
+            sl[pwin.__ki].style.opacity = '1';
+          }}, 5000);
+
+          // Active connectivity probe: a tiny cross-origin fetch every few
+          // seconds. navigator.onLine is unreliable in Safari (it can stay true
+          // after Wi-Fi is cut), so the fetch is the source of truth — reject
+          // (network error / timeout) => offline, resolve => online. This also
+          // catches "Wi-Fi up but internet dead".
+          const probe = function() {{
+            try {{
+              const ctrl = new pwin.AbortController();
+              const t = pwin.setTimeout(function() {{ ctrl.abort(); }}, 3000);
+              pwin.fetch('https://www.gstatic.com/generate_204',
+                         {{mode: 'no-cors', cache: 'no-store', signal: ctrl.signal}})
+                .then(function() {{ pwin.clearTimeout(t); hide(); }})
+                .catch(function() {{ pwin.clearTimeout(t); show(); }});
+            }} catch (e) {{ show(); }}
+          }};
+          if (pwin.__kioskProbe) pwin.clearInterval(pwin.__kioskProbe);
+          pwin.__kioskProbe = pwin.setInterval(probe, 4000);
+          probe();
+
+          if (!pwin.navigator.onLine) show();
+        }})();
+        </script>
+        """,
+        height=0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -823,12 +905,6 @@ def render_loading():
                 st.session_state.page = "result"
                 st.rerun()
             except Exception as e:
-                # If the failure is due to lost connectivity, switch to the
-                # offline gallery rather than showing a raw error.
-                if not refresh_connectivity():
-                    st.session_state.page = "offline"
-                    st.rerun()
-                    return
                 st.error(f"{tr('error_generation')}: {e}")
                 if st.button(tr("error_retry")):
                     st.session_state.page = "home"
@@ -967,72 +1043,6 @@ def render_result():
 
 
 # ---------------------------------------------------------------------------
-# PAGE: Offline — no internet: show the last generated images and auto-retry
-# ---------------------------------------------------------------------------
-def render_offline():
-    # Reconnected? Resume normal operation immediately.
-    if refresh_connectivity():
-        st.session_state.page = "home"
-        st.rerun()
-        return
-
-    render_language_selector()
-    st.markdown(
-        f'<div class="page-title">{tr("offline_title")}</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<div class="page-subtitle">{tr("offline_sub")}</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<div class="help-box" style="text-align:center;">'
-        f'{tr("offline_gallery")}<br><span style="color:#8899aa;">'
-        f'{tr("offline_reconnecting")}</span></div>',
-        unsafe_allow_html=True,
-    )
-
-    images = health.recent_images(10)
-    if not images:
-        _, mid, _ = st.columns([1, 2, 1])
-        with mid:
-            st.info(tr("offline_empty"))
-    else:
-        cols_per_row = 2
-        for row_start in range(0, len(images), cols_per_row):
-            row_items = images[row_start : row_start + cols_per_row]
-            cols = st.columns(cols_per_row, gap="medium")
-            for offset, img_path in enumerate(row_items):
-                with cols[offset]:
-                    st.markdown('<div class="result-frame">', unsafe_allow_html=True)
-                    st.image(str(img_path), use_container_width=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Hidden button auto-clicked by JS: triggers a rerun (keeping the session)
-    # every 12 s so render_offline can re-probe connectivity without a full
-    # page reload that would drop the login state.
-    st.markdown('<div style="display:none;">', unsafe_allow_html=True)
-    st.button("__retry_conn__", key="offline_retry_hidden")
-    st.markdown("</div>", unsafe_allow_html=True)
-    components.html(
-        """
-        <script>
-        setTimeout(function() {
-            const buttons = window.parent.document.querySelectorAll('button');
-            for (const btn of buttons) {
-                if (btn.innerText.trim() === '__retry_conn__') {
-                    btn.click();
-                    break;
-                }
-            }
-        }, 12000);
-        </script>
-        """,
-        height=0,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
 if login_required() and not st.session_state.authenticated:
@@ -1045,16 +1055,7 @@ else:
             st.session_state.page = "home"
 
     page = st.session_state.page
-    # Connectivity gate: the interactive pages need internet. If the kiosk is
-    # offline, fall back to the view-only gallery. The result page is exempt so
-    # a visitor can finish looking at an image they already generated.
-    if page in ("home", "prompt", "loading") and not is_online():
-        st.session_state.page = "offline"
-        page = "offline"
-
-    if page == "offline":
-        render_offline()
-    elif page == "home":
+    if page == "home":
         render_home()
     elif page == "prompt":
         render_prompt()
@@ -1065,3 +1066,8 @@ else:
     else:
         st.session_state.page = "home"
         st.rerun()
+
+    # Browser-native offline slideshow: appears instantly on Wi-Fi loss, hides
+    # when the connection returns. Injected on every page so the kiosk is always
+    # covered, whatever screen it is idling on.
+    _inject_offline_overlay()
