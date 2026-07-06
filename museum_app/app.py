@@ -34,6 +34,19 @@ def get_secret(key: str, default: str = "") -> str:
         return os.getenv(key, default)
 
 
+def login_required() -> bool:
+    """
+    Whether to show the password screen.
+
+    The public Streamlit Cloud URL must be protected, so login defaults to ON.
+    The physical museum kiosk is already access-controlled, so it disables it
+    with REQUIRE_LOGIN=false in its local .env — no password prompt for visitors.
+    """
+    return str(get_secret("REQUIRE_LOGIN", "true")).strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Page config (must be first Streamlit call)
 # ---------------------------------------------------------------------------
@@ -1022,9 +1035,15 @@ def render_offline():
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
-if not st.session_state.authenticated:
+if login_required() and not st.session_state.authenticated:
     render_login()
 else:
+    # Login disabled (local kiosk): walk straight in, no password prompt.
+    if not st.session_state.authenticated:
+        st.session_state.authenticated = True
+        if st.session_state.page == "login":
+            st.session_state.page = "home"
+
     page = st.session_state.page
     # Connectivity gate: the interactive pages need internet. If the kiosk is
     # offline, fall back to the view-only gallery. The result page is exempt so
